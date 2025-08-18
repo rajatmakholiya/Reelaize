@@ -16,35 +16,52 @@ class VideoSplitterApp:
         """
         self.root = root
         self.root.title("Video Splitter")
-        self.root.geometry("600x620") # Increased height for new widget
+        self.root.geometry("600x620")
         self.root.resizable(True, True)
+        # self.root.configure(bg="#2e2e2e") # Removed dark background
 
-        # Style configuration
+        # --- Light Theme Style Configuration ---
         self.style = ttk.Style(self.root)
         self.style.theme_use('clam')
-        self.style.configure("TButton", padding=6, relief="flat", background="#0078D7", foreground="white", font=('Helvetica', 10, 'bold'))
-        self.style.map("TButton", background=[('active', '#005a9e')])
-        self.style.configure("TLabel", font=('Helvetica', 10), background="#f0f0f0")
+
+        # General widget styles
         self.style.configure("TFrame", background="#f0f0f0")
-        self.style.configure("Title.TLabel", font=('Helvetica', 16, 'bold'), background="#f0f0f0")
-        self.style.configure("Path.TLabel", font=('Helvetica', 9), background="#f0f0f0", foreground="#555")
+        self.style.configure("TLabel", background="#f0f0f0", foreground="black", font=('Helvetica', 10))
+        self.style.configure("Title.TLabel", font=('Helvetica', 16, 'bold'), foreground="black")
+        self.style.configure("Path.TLabel", font=('Helvetica', 9), foreground="#555")
+        self.style.configure("TCheckbutton", background="#f0f0f0")
+        
+        # Button styles
+        self.style.configure("TButton", padding=6, relief="flat", font=('Helvetica', 10), background="#f0f0f0")
+        self.style.map("TButton",
+            background=[('active', '#e0e0e0')]
+        )
+        
+        # Accent button for the main action
+        self.style.configure("Accent.TButton", font=('Helvetica', 11, 'bold'), background="#0078d7", foreground="white")
+        self.style.map("Accent.TButton",
+            background=[('active', '#005a9e')]
+        )
+
+        # Input field styles
         self.style.configure("TEntry", padding=5)
         self.style.configure("TCombobox", padding=5)
-        self.style.configure("TCheckbutton", background="#f0f0f0")
+
+        # Progress bar style
+        self.style.configure("TProgressbar", thickness=15, troughcolor='#e0e0e0', background='#0078d7', bordercolor="#e0e0e0")
 
         # Variables
         self.input_file_path = tk.StringVar()
         self.output_dir_path = tk.StringVar()
         self.clip_duration = tk.IntVar(value=60)
         self.aspect_ratio_choice = tk.StringVar(value="Original")
-        self.add_subtitle = tk.BooleanVar(value=False) # New variable for subtitles
-        self.log_queue = queue.Queue() # Queue for thread-safe logging
+        self.add_subtitle = tk.BooleanVar(value=False)
+        self.log_queue = queue.Queue()
 
         # --- UI Layout ---
         main_frame = ttk.Frame(self.root, padding="20")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # --- Options Frame ---
         options_frame = ttk.Frame(main_frame)
         options_frame.pack(fill=tk.X, expand=False, pady=(0, 10))
 
@@ -77,7 +94,6 @@ class VideoSplitterApp:
         )
         self.ratio_combobox.pack(side=tk.LEFT)
 
-        # --- Subtitle Checkbox ---
         subtitle_frame = ttk.Frame(options_frame)
         subtitle_frame.pack(fill=tk.X, pady=5, anchor='w')
         self.subtitle_checkbox = ttk.Checkbutton(
@@ -85,22 +101,20 @@ class VideoSplitterApp:
         )
         self.subtitle_checkbox.pack(side=tk.LEFT, pady=(5,0))
 
-        # --- Progress and Control Frame ---
         progress_frame = ttk.Frame(main_frame)
         progress_frame.pack(fill=tk.X, expand=False, pady=10)
         self.progress = ttk.Progressbar(progress_frame, orient=tk.HORIZONTAL, length=100, mode='determinate')
         self.progress.pack(fill=tk.X, expand=True, side=tk.LEFT, padx=(0, 10))
-        self.start_button = ttk.Button(progress_frame, text="Start Splitting", command=self.start_splitting_thread)
+        self.start_button = ttk.Button(progress_frame, text="Start Splitting", command=self.start_splitting_thread, style="Accent.TButton")
         self.start_button.pack(side=tk.RIGHT)
 
         self.status_label = ttk.Label(main_frame, text="Ready", anchor=tk.W)
         self.status_label.pack(fill=tk.X, pady=(0, 10))
 
-        # --- Log Viewer ---
         log_frame = ttk.Frame(main_frame)
         log_frame.pack(fill=tk.BOTH, expand=True)
         ttk.Label(log_frame, text="FFmpeg Log:").pack(anchor='w')
-        self.log_text = ScrolledText(log_frame, height=10, state='disabled', bg='#2b2b2b', fg='white', font=('Consolas', 9))
+        self.log_text = ScrolledText(log_frame, height=10, state='disabled', bg='#ffffff', fg='black', font=('Consolas', 9), relief='solid', borderwidth=1)
         self.log_text.pack(fill=tk.BOTH, expand=True, pady=(5,0))
 
         self.check_ffmpeg()
@@ -177,43 +191,36 @@ class VideoSplitterApp:
             self.progress['maximum'] = num_clips
             self.log_queue.put(f"Calculated {num_clips} clips of {clip_duration} seconds each.\n")
 
-            file_name, file_ext = os.path.splitext(os.path.basename(input_file))
+            _ , file_ext = os.path.splitext(os.path.basename(input_file))
 
             for i in range(num_clips):
                 start_time = i * clip_duration
-                output_filename = f"{file_name}-Part-{i+1}{file_ext}"
+                output_filename = f"Part {i+1}{file_ext}"
                 output_path = os.path.join(output_dir, output_filename)
 
                 self.status_label.config(text=f"Processing clip {i+1} of {num_clips}...")
                 self.log_queue.put(f"\n--- Generating clip {i+1}: {output_filename} ---\n")
 
-                # Determine if re-encoding is necessary
                 is_re_encoding_needed = (aspect_ratio != "Original") or add_subtitle
 
                 if not is_re_encoding_needed:
-                    # Fast path: No filters, just copy the video stream
                     ffmpeg_cmd = ["ffmpeg", "-i", input_file, "-ss", str(start_time), "-t", str(clip_duration), "-c", "copy", "-y", output_path]
                 else:
-                    # Slow path: Re-encoding is required, build the filter chain
                     filter_chain = ""
                     
-                    # Aspect Ratio Filter
                     if aspect_ratio == "Reels (9:16)":
                         filter_chain += "[0:v]split[original][copy];[copy]scale=w=1080:h=1920:force_original_aspect_ratio=increase,crop=w=1080:h=1920,boxblur=10:5[background];[original]scale=w=1080:h=1920:force_original_aspect_ratio=decrease[foreground];[background][foreground]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2"
                     elif aspect_ratio == "Square (1:1)":
                         filter_chain += "[0:v]split[original][copy];[copy]scale=w=1080:h=1080:force_original_aspect_ratio=increase,crop=w=1080:h=1080,boxblur=10:5[background];[original]scale=w=1080:h=1080:force_original_aspect_ratio=decrease[foreground];[background][foreground]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2"
 
-                    # Subtitle Filter
                     if add_subtitle:
                         subtitle_text = f"Part {i+1}"
-                        # **FIXED**: Changed y position from 30 to 500
-                        drawtext_filter = f"drawtext=text='{subtitle_text}':fontsize=48:fontcolor=white:x=(w-text_w)/2:y=450:box=1:boxcolor=black@0.5:boxborderw=5"
-                        if filter_chain: # Append to existing filter chain
+                        drawtext_filter = f"drawtext=text='{subtitle_text}':fontsize=48:fontcolor=white:x=(w-text_w)/2:y=60:box=1:boxcolor=black@0.5:boxborderw=5"
+                        if filter_chain:
                             filter_chain += f"[vid];[vid]{drawtext_filter}"
-                        else: # This is the only filter
+                        else:
                             filter_chain = drawtext_filter
                     
-                    # Determine if the filter is simple (-vf) or complex (-filter_complex)
                     filter_flag = "-filter_complex" if "split" in filter_chain else "-vf"
 
                     ffmpeg_cmd = [
